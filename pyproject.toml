@@ -1,6 +1,6 @@
 [project]
 name = "aio-actors"
-version = "0.1.0"
+version = "0.1.1"
 description = "Simple library for building actors in asyncio."
 readme = "README.md"
 authors = [
