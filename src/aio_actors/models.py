@@ -26,7 +26,6 @@ class Actor(Generic[T], ABC):
         self._started = True
         bg_task = asyncio.create_task(self.__background_event_loop())
         bg_task.add_done_callback(self.__running_tasks.discard)
-        self.__running_tasks.add(bg_task)
 
     async def send_message(self, message: T) -> None:
         """
@@ -37,6 +36,7 @@ class Actor(Generic[T], ABC):
 
     async def __background_event_loop(self):
         while True:
+            await self.__wait_for_running_tasks()
             task = await self._queue.get()
             if task is None:
                 break
@@ -44,6 +44,12 @@ class Actor(Generic[T], ABC):
             handler_task = asyncio.create_task(self.handle_message(task))
             handler_task.add_done_callback(self.__running_tasks.discard)
             self.__running_tasks.add(handler_task)
+
+    async def __wait_for_running_tasks(self):
+        if len(self.__running_tasks) > 0:
+            await asyncio.wait(
+                self.__running_tasks, return_when=asyncio.FIRST_COMPLETED
+            )
 
     async def shutdown(self):
         """
