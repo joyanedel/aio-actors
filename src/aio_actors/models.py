@@ -41,7 +41,7 @@ class Actor(Generic[T], ABC):
                 break
 
             handler_task = asyncio.create_task(
-                asyncio.shield(self.handle_message(task))
+                self.handle_message(task)
             )
             handler_task.add_done_callback(self.__running_tasks.discard)
             self.__running_tasks.add(handler_task)
