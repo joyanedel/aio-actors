@@ -24,8 +24,8 @@ class Actor(Generic[T], ABC):
             raise RuntimeError("Actor is already started")
 
         self._started = True
-        bg_task = asyncio.create_task(self.__background_event_loop())
-        bg_task.add_done_callback(self.__running_tasks.discard)
+        self.__bg_task = asyncio.create_task(self.__background_event_loop())
+        self.__bg_task.add_done_callback(self.__running_tasks.discard)
 
     async def send_message(self, message: T) -> None:
         """
@@ -36,20 +36,15 @@ class Actor(Generic[T], ABC):
 
     async def __background_event_loop(self):
         while True:
-            await self.__wait_for_running_tasks()
             task = await self._queue.get()
             if task is None:
                 break
 
-            handler_task = asyncio.create_task(self.handle_message(task))
+            handler_task = asyncio.create_task(
+                asyncio.shield(self.handle_message(task))
+            )
             handler_task.add_done_callback(self.__running_tasks.discard)
             self.__running_tasks.add(handler_task)
-
-    async def __wait_for_running_tasks(self):
-        if len(self.__running_tasks) > 0:
-            await asyncio.wait(
-                self.__running_tasks, return_when=asyncio.FIRST_COMPLETED
-            )
 
     async def shutdown(self):
         """
@@ -61,11 +56,11 @@ class Actor(Generic[T], ABC):
         await self._queue.put(None)
 
         await asyncio.sleep(0)
-        # Wait for all running tasks to complete
-        await asyncio.wait(
-            self.__running_tasks | {asyncio.create_task(asyncio.sleep(0))},
-            return_when=asyncio.ALL_COMPLETED,
-        )
+        self.__running_tasks.add(asyncio.shield(asyncio.create_task(asyncio.sleep(0))))
+
+        await asyncio.wait(self.__running_tasks)
+        await asyncio.shield(self.__bg_task)
+
         self._started = False
 
     def __verify_started(self):
